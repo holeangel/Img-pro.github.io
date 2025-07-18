@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>图片URL批量处理系统</title>
+    <title>图片MD5批量处理系统</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/spark-md5/3.0.2/spark-md5.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -380,20 +381,20 @@
             background: rgba(241, 196, 15, 0.15);
             color: #d35400;
         }
-        .api-key-section {
-            background: #fff8e1;
-            padding: 15px 20px;
-            border-radius: 8px;
+        .cloudinary-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
             margin-bottom: 25px;
-            border-left: 4px solid #ffca28;
         }
-        .api-key-input {
-            width: 100%;
+        .cloudinary-input {
             padding: 12px 15px;
             border: 2px solid #ffd54f;
             border-radius: 8px;
-            margin-top: 10px;
             font-size: 1rem;
+        }
+        .preset-input {
+            border-color: #aed581;
         }
         @media (max-width: 768px) {
             .input-group {
@@ -420,6 +421,9 @@
             .action-btn {
                 min-width: 100%;
             }
+            .cloudinary-section {
+                grid-template-columns: 1fr;
+            }
             h1 {
                 font-size: 2.2rem;
             }
@@ -443,25 +447,26 @@
                 <div class="input-group">
                     <input type="text" id="singleUrl" class="url-input" 
                            placeholder="输入图片URL（支持任何格式）..." 
-                           value="http://sns-webpic-qc.xhscdn.com/202507091118/5d7a44321d282928f61d09770bf0f320/notes_pre_post/1040g3k831jh3gt6ijobg4br01pbimeugipnvi88!nd_dft_wlteh_webp_3">
+                           value="http://sns-webpic-qc.xhscdn.com/202507171541/faebdd2ad8bc179f9f816d50cc97d9ab/1040g2sg31jos79mk3qe05pnmamd7eao4l7s6edg!nd_dft_wlteh_webp_3">
                     <button id="addUrlBtn" class="add-btn">添加图片</button>
                 </div>
                 
                 <div class="batch-section">
-                    <textarea id="batchUrls" class="batch-input" placeholder="批量输入图片URL（每行一个URL）..."></textarea>
+                    <textarea id="batchUrls" class="batch-input" placeholder="批量输入图片URL（每行一个URL）...">http://sns-webpic-qc.xhscdn.com/202507171541/faebdd2ad8bc179f9f816d50cc97d9ab/1040g2sg31jos79mk3qe05pnmamd7eao4l7s6edg!nd_dft_wlteh_webp_3
+http://sns-webpic-qc.xhscdn.com/202507091118/5d7a44321d282928f61d09770bf0f320/notes_pre_post/1040g3k831jh3gt6ijobg4br01pbimeugipnvi88!nd_dft_wlteh_webp_3</textarea>
                     <button id="addBatchBtn" class="batch-btn">批量添加</button>
-                </div>
-                
-                <div class="api-key-section">
-                    <h3><i class="fas fa-key"></i> Imgur API密钥（可选）</h3>
-                    <input type="text" id="apiKey" class="api-key-input" 
-                           placeholder="输入您的Imgur API密钥（如无则使用默认密钥）">
-                    <p class="note">提示：使用自己的API密钥可获得更稳定的服务（<a href="https://api.imgur.com/" target="_blank">获取API密钥</a>）</p>
                 </div>
                 
                 <div class="note">
                     <i class="fas fa-info-circle"></i> 
-                    系统使用Imgur API上传图片并生成真实可访问的链接。支持任何格式的图片URL。
+                    系统支持小红书等平台图片链接。添加后点击"开始处理"修改图片MD5值。
+                </div>
+                
+                <div class="cloudinary-section">
+                    <input type="text" id="cloudName" class="cloudinary-input" 
+                           placeholder="Cloudinary Cloud Name (必填)" value="demo">
+                    <input type="text" id="uploadPreset" class="cloudinary-input preset-input" 
+                           placeholder="Upload Preset (必填)" value="ml_default">
                 </div>
                 
                 <div class="progress-section">
@@ -497,12 +502,14 @@
         </div>
         
         <footer>
-            <p>© 2023 图片URL批量处理系统 | 使用Imgur API生成真实图片链接</p>
+            <p>© 2023 图片URL批量处理系统 | 使用Cloudinary API生成真实图片链接</p>
         </footer>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM已加载，开始绑定事件");
+            
             // DOM元素
             const singleUrlInput = document.getElementById('singleUrl');
             const addUrlBtn = document.getElementById('addUrlBtn');
@@ -516,7 +523,8 @@
             const totalCount = document.getElementById('totalCount');
             const progressPercentage = document.getElementById('progressPercentage');
             const status = document.getElementById('status');
-            const apiKeyInput = document.getElementById('apiKey');
+            const cloudNameInput = document.getElementById('cloudName');
+            const uploadPresetInput = document.getElementById('uploadPreset');
             
             // 存储URL和结果
             let imageUrls = [];
@@ -524,14 +532,11 @@
             
             // 添加单张图片URL
             addUrlBtn.addEventListener('click', () => {
+                console.log("添加图片按钮被点击");
                 const url = singleUrlInput.value.trim();
-                if (url && isValidUrl(url)) {
+                if (url) {
                     imageUrls.push(url);
                     updateStatus(`成功添加图片URL: ${truncateUrl(url)}`, 'success');
-                } else if (url) {
-                    // 提示用户URL可能是有效的，但是格式特殊
-                    updateStatus(`URL已添加，但格式特殊: ${truncateUrl(url)}`, 'warning');
-                    imageUrls.push(url);
                 } else {
                     updateStatus('请输入有效的图片URL！', 'error');
                 }
@@ -540,26 +545,34 @@
             
             // 批量添加图片URL
             addBatchBtn.addEventListener('click', () => {
+                console.log("批量添加按钮被点击");
                 const urls = batchUrlsInput.value.split('\n').map(url => url.trim()).filter(url => url);
                 if (urls.length === 0) {
                     updateStatus('请输入有效的图片URL！', 'error');
                     return;
                 }
                 
-                const validUrls = urls.filter(url => isValidUrl(url));
-                const specialUrls = urls.filter(url => !isValidUrl(url) && url);
-                
-                imageUrls = [...imageUrls, ...validUrls, ...specialUrls];
+                imageUrls = [...imageUrls, ...urls];
                 batchUrlsInput.value = '';
                 
-                updateStatus(`成功添加 ${validUrls.length} 个图片URL和${specialUrls.length}个特殊格式URL`, 'success');
+                updateStatus(`成功添加 ${urls.length} 个图片URL`, 'success');
                 updateProgress();
             });
             
             // 开始处理图片
             processBtn.addEventListener('click', async () => {
+                console.log("开始处理按钮被点击");
                 if (imageUrls.length === 0) {
                     updateStatus('请先添加图片URL！', 'error');
+                    return;
+                }
+                
+                // 检查Cloudinary配置
+                const cloudName = cloudNameInput.value.trim();
+                const uploadPreset = uploadPresetInput.value.trim();
+                
+                if (!cloudName || !uploadPreset) {
+                    updateStatus('请填写Cloudinary Cloud Name和Upload Preset！', 'error');
                     return;
                 }
                 
@@ -574,20 +587,43 @@
                 progressFill.style.width = '0%';
                 
                 try {
-                    // 获取API密钥
-                    const apiKey = apiKeyInput.value.trim() || 'Client-ID 1d22d5d5cbc955b'; // 默认API密钥
-                    
                     // 处理所有图片
                     for (let i = 0; i < imageUrls.length; i++) {
                         const url = imageUrls[i];
                         try {
-                            const result = await processImage(url, i, apiKey);
-                            results.push(result);
+                            // 下载图片
+                            const response = await fetch(url, {mode: 'cors'});
+                            if (response.status !== 200) {
+                                throw new Error(`下载失败: HTTP ${response.status}`);
+                            }
+                            
+                            const blob = await response.blob();
+                            
+                            // 计算原始MD5
+                            const originalMd5 = await calculateMD5(blob);
+                            
+                            // 修改图片
+                            const modifiedBlob = await modifyImage(blob);
+                            
+                            // 计算新MD5
+                            const modifiedMd5 = await calculateMD5(modifiedBlob);
+                            
+                            // 上传到Cloudinary
+                            const uploadResponse = await uploadToCloudinary(modifiedBlob, cloudName, uploadPreset);
+                            
+                            results.push({
+                                id: i + 1,
+                                originalUrl: url,
+                                processedUrl: uploadResponse.secure_url,
+                                originalMd5: originalMd5,
+                                modifiedMd5: modifiedMd5,
+                                imageName: url.split('/').pop().substring(0, 20) || `image-${i+1}`
+                            });
                             
                             // 显示处理结果
                             displayPartialResults();
                         } catch (error) {
-                            // 处理失败，添加错误结果
+                            console.error(`处理图片失败: ${url} - ${error.message}`);
                             results.push({
                                 id: i + 1,
                                 originalUrl: url,
@@ -601,9 +637,6 @@
                         processedCount.textContent = i + 1;
                         progressPercentage.textContent = `${progress}%`;
                         progressFill.style.width = `${progress}%`;
-                        
-                        // 延迟效果
-                        await new Promise(resolve => setTimeout(resolve, 500));
                     }
                     
                     // 显示最终结果
@@ -611,12 +644,14 @@
                     updateStatus(`所有图片处理完成！共生成 ${results.length} 个真实图片链接`, 'success');
                     
                 } catch (error) {
+                    console.error(`全局错误: ${error.message}`);
                     updateStatus(`处理过程中出错: ${error.message}`, 'error');
                 }
             });
             
             // 重置系统
             resetBtn.addEventListener('click', () => {
+                console.log("重置按钮被点击");
                 imageUrls = [];
                 results = [];
                 resultsContainer.innerHTML = `
@@ -632,50 +667,94 @@
                 updateStatus('系统已重置', 'success');
             });
             
-            // 处理单张图片（使用Imgur API）
-            async function processImage(url, index, apiKey) {
-                updateStatus(`正在上传图片 ${index + 1}/${imageUrls.length}...`, 'processing');
-                
-                try {
-                    // 第一步：获取原始图片数据
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error(`无法获取图片: ${response.status} ${response.statusText}`);
-                    
-                    const blob = await response.blob();
-                    
-                    // 第二步：上传到Imgur
-                    const formData = new FormData();
-                    formData.append('image', blob);
-                    
-                    const uploadResponse = await fetch('https://api.imgur.com/3/image', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': apiKey
-                        },
-                        body: formData
-                    });
-                    
-                    const uploadData = await uploadResponse.json();
-                    
-                    if (!uploadResponse.ok) {
-                        throw new Error(`上传失败: ${uploadData.data.error || '未知错误'}`);
-                    }
-                    
-                    // 第三步：获取真实图片链接
-                    const imageLink = uploadData.data.link;
-                    
-                    return {
-                        id: index + 1,
-                        originalUrl: url,
-                        processedUrl: imageLink,
-                        imageName: url.split('/').pop().substring(0, 20) || `image-${index+1}`,
-                        timestamp: new Date().toISOString()
+            // 计算MD5哈希值
+            async function calculateMD5(blob) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        try {
+                            const arrayBuffer = e.target.result;
+                            const spark = new SparkMD5.ArrayBuffer();
+                            spark.append(arrayBuffer);
+                            const md5 = spark.end();
+                            resolve(md5);
+                        } catch (error) {
+                            reject(error);
+                        }
+                    };
+                    reader.onerror = reject;
+                    reader.readAsArrayBuffer(blob);
+                });
+            }
+            
+            // 修改图片内容（更改MD5）
+            async function modifyImage(blob) {
+                return new Promise((resolve, reject) => {
+                    // 创建图片对象
+                    const img = new Image();
+                    img.onload = () => {
+                        // 创建canvas
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        
+                        // 设置canvas尺寸
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        
+                        // 绘制原图
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // 修改图片 - 添加微小变化（几乎不可见）
+                        const pixels = 100; // 每100x100区域修改一个像素
+                        for (let x = 0; x < canvas.width; x += pixels) {
+                            for (let y = 0; y < canvas.height; y += pixels) {
+                                const pixelX = Math.min(x + Math.floor(Math.random() * pixels), canvas.width - 1);
+                                const pixelY = Math.min(y + Math.floor(Math.random() * pixels), canvas.height - 1);
+                                
+                                // 获取当前像素颜色
+                                const pixelData = ctx.getImageData(pixelX, pixelY, 1, 1);
+                                const data = pixelData.data;
+                                
+                                // 微调颜色（改变MD5但视觉影响小）
+                                data[0] = (data[0] + 1) % 256; // 红色
+                                data[1] = (data[1] + 1) % 256; // 绿色
+                                data[2] = (data[2] + 1) % 256; // 蓝色
+                                
+                                // 写回像素
+                                ctx.putImageData(pixelData, pixelX, pixelY);
+                            }
+                        }
+                        
+                        // 转换为Blob
+                        canvas.toBlob(blob => {
+                            resolve(blob);
+                        }, 'image/jpeg', 0.95);
                     };
                     
-                } catch (error) {
-                    console.error('处理图片失败:', error);
-                    throw new Error(`处理图片失败: ${error.message}`);
+                    img.onerror = reject;
+                    
+                    // 将Blob转为URL加载图片
+                    img.src = URL.createObjectURL(blob);
+                });
+            }
+            
+            // 上传到Cloudinary
+            async function uploadToCloudinary(blob, cloudName, uploadPreset) {
+                const formData = new FormData();
+                formData.append('file', blob);
+                formData.append('upload_preset', uploadPreset);
+                
+                const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`上传失败: ${errorData.error.message || response.statusText}`);
                 }
+                
+                return await response.json();
             }
             
             // 显示部分结果（处理过程中）
@@ -684,66 +763,8 @@
                 
                 resultsContainer.innerHTML = '';
                 results.forEach(result => {
-                    const card = document.createElement('div');
-                    card.className = 'result-card';
-                    
-                    if (result.error) {
-                        // 错误卡片
-                        card.innerHTML = `
-                            <div class="card-header">
-                                <span>图片处理失败</span>
-                                <span class="card-id">#${result.id}</span>
-                            </div>
-                            <div class="card-content">
-                                <div class="image-container" style="background: #ffebee;">
-                                    <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #f44336;"></i>
-                                </div>
-                                <div class="md5-display">
-                                    <div><strong>原始URL:</strong> ${truncateUrl(result.originalUrl)}</div>
-                                    <div><strong>错误信息:</strong> ${result.error}</div>
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        // 成功卡片
-                        card.innerHTML = `
-                            <div class="card-header">
-                                <span>图片: ${result.imageName}</span>
-                                <span class="card-id">#${result.id}</span>
-                            </div>
-                            <div class="card-content">
-                                <div class="image-container">
-                                    <img src="${result.processedUrl}" class="preview-img" alt="处理后的图片预览">
-                                </div>
-                                <div class="md5-display">
-                                    <div><strong>原始URL:</strong> ${truncateUrl(result.originalUrl)}</div>
-                                </div>
-                                <div class="link-display">
-                                    <span class="link-label">真实图片链接:</span>
-                                    ${result.processedUrl}
-                                </div>
-                            </div>
-                            <div class="card-footer">
-                                <button class="card-btn copy-btn" data-url="${result.processedUrl}">
-                                    <i class="fas fa-copy"></i> 复制链接
-                                </button>
-                                <a href="${result.processedUrl}" target="_blank" class="card-btn download-btn">
-                                    <i class="fas fa-external-link-alt"></i> 访问图片
-                                </a>
-                            </div>
-                        `;
-                    }
-                    
+                    const card = createResultCard(result);
                     resultsContainer.appendChild(card);
-                });
-                
-                // 添加复制功能
-                document.querySelectorAll('.copy-btn').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const url = btn.getAttribute('data-url');
-                        copyToClipboard(url);
-                        updateStatus('链接已复制到剪贴板', 'success');
-                    });
                 });
             }
             
@@ -761,67 +782,75 @@
                 
                 resultsContainer.innerHTML = '';
                 results.forEach(result => {
-                    const card = document.createElement('div');
-                    card.className = 'result-card';
-                    
-                    if (result.error) {
-                        // 错误卡片
-                        card.innerHTML = `
-                            <div class="card-header">
-                                <span>图片处理失败</span>
-                                <span class="card-id">#${result.id}</span>
-                            </div>
-                            <div class="card-content">
-                                <div class="image-container" style="background: #ffebee;">
-                                    <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #f44336;"></i>
-                                </div>
-                                <div class="md5-display">
-                                    <div><strong>原始URL:</strong> ${truncateUrl(result.originalUrl)}</div>
-                                    <div><strong>错误信息:</strong> ${result.error}</div>
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        // 成功卡片
-                        card.innerHTML = `
-                            <div class="card-header">
-                                <span>图片: ${result.imageName}</span>
-                                <span class="card-id">#${result.id}</span>
-                            </div>
-                            <div class="card-content">
-                                <div class="image-container">
-                                    <img src="${result.processedUrl}" class="preview-img" alt="处理后的图片预览">
-                                </div>
-                                <div class="md5-display">
-                                    <div><strong>原始URL:</strong> ${truncateUrl(result.originalUrl)}</div>
-                                </div>
-                                <div class="link-display">
-                                    <span class="link-label">真实图片链接:</span>
-                                    ${result.processedUrl}
-                                </div>
-                            </div>
-                            <div class="card-footer">
-                                <button class="card-btn copy-btn" data-url="${result.processedUrl}">
-                                    <i class="fas fa-copy"></i> 复制链接
-                                </button>
-                                <a href="${result.processedUrl}" target="_blank" class="card-btn download-btn">
-                                    <i class="fas fa-external-link-alt"></i> 访问图片
-                                </a>
-                            </div>
-                        `;
-                    }
-                    
+                    const card = createResultCard(result);
                     resultsContainer.appendChild(card);
                 });
+            }
+            
+            // 创建结果卡片
+            function createResultCard(result) {
+                const card = document.createElement('div');
+                card.className = 'result-card';
                 
-                // 添加复制功能
-                document.querySelectorAll('.copy-btn').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const url = btn.getAttribute('data-url');
+                if (result.error) {
+                    // 错误卡片
+                    card.innerHTML = `
+                        <div class="card-header">
+                            <span>图片处理失败</span>
+                            <span class="card-id">#${result.id}</span>
+                        </div>
+                        <div class="card-content">
+                            <div class="image-container" style="background: #ffebee;">
+                                <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: #f44336;"></i>
+                            </div>
+                            <div class="md5-display">
+                                <div><strong>原始URL:</strong> ${truncateUrl(result.originalUrl)}</div>
+                                <div><strong>错误信息:</strong> ${result.error}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // 成功卡片
+                    card.innerHTML = `
+                        <div class="card-header">
+                            <span>图片: ${result.imageName}</span>
+                            <span class="card-id">#${result.id}</span>
+                        </div>
+                        <div class="card-content">
+                            <div class="image-container">
+                                <img src="${result.processedUrl}" class="preview-img" alt="处理后的图片预览">
+                            </div>
+                            <div class="md5-display">
+                                <div><strong>原始URL:</strong> ${truncateUrl(result.originalUrl)}</div>
+                                <div><strong>原始MD5:</strong> ${result.originalMd5}</div>
+                                <div><strong>修改后MD5:</strong> ${result.modifiedMd5}</div>
+                                <div><strong>状态:</strong> <span style="color: #27ae60;">MD5已变更</span></div>
+                            </div>
+                            <div class="link-display">
+                                <span class="link-label">新图片链接:</span>
+                                ${result.processedUrl}
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <button class="card-btn copy-btn" data-url="${result.processedUrl}">
+                                <i class="fas fa-copy"></i> 复制链接
+                            </button>
+                            <a href="${result.processedUrl}" target="_blank" class="card-btn download-btn">
+                                <i class="fas fa-external-link-alt"></i> 访问图片
+                            </a>
+                        </div>
+                    `;
+                    
+                    // 添加复制功能
+                    const copyBtn = card.querySelector('.copy-btn');
+                    copyBtn.addEventListener('click', () => {
+                        const url = copyBtn.getAttribute('data-url');
                         copyToClipboard(url);
                         updateStatus('链接已复制到剪贴板', 'success');
                     });
-                });
+                }
+                
+                return card;
             }
             
             // 更新状态信息
@@ -844,16 +873,6 @@
             }
             
             // 实用函数
-            function isValidUrl(url) {
-                try {
-                    // 创建URL对象验证URL格式
-                    new URL(url);
-                    return true;
-                } catch (_) {
-                    return false;
-                }
-            }
-            
             function truncateUrl(url, maxLength = 50) {
                 return url.length > maxLength 
                     ? url.substring(0, maxLength/2) + '...' + url.substring(url.length - maxLength/2) 
